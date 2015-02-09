@@ -1,0 +1,63 @@
+#!/bin/bash
+
+
+#Auther: Mohammed Ameen Al-Qudah
+#Date: 15 Sep 2014
+#Purpose: Will give statistics for the Query per Host
+
+#Variables:
+#Username : root
+#Password: ****
+USERNAME='root'
+
+# If there is a password the value of the bellow should be '-p***'
+PASSWORD=''
+
+DB_LIST="/usr/local/scripts/munin/mysql_host.list"
+###########
+#Get the script usage:
+#$0_select --> collect no. of selects per host
+#$0_update --> collect no. of updates per host
+
+USAGE=`echo $0 | awk -F '_' '{print $NF}'`
+
+TMP_FILE=`basename ${0}`_$$_stat
+
+if [ "${USAGE}" == 'select' ] ; then 
+	
+	mysql -u ${USERNAME} ${PASSWORD}  -N -B -e "show processlist" | grep -i select |  awk '{print $3}' | sed -e 's/:.*//g' -e 's/\./_/g'| sort |uniq -c >/tmp/${TMP_FILE}
+
+	cat ${DB_LIST} | while read IP ; do grep ${IP} /tmp/${TMP_FILE}>>/dev/null || echo " 0   ${IP}" >> /tmp/${TMP_FILE} ; done
+
+	TITLE="NO. of Selects per host"
+        VALUE_CONFIG=`cat /tmp/${TMP_FILE} | awk '{print $2".label " $2}'`
+        VALUE=`cat /tmp/${TMP_FILE}  | awk '{print $2".value " $1}'`
+	awk '{print $2}' /tmp/${TMP_FILE} | sort -u > ${DB_LIST}
+        rm -f /tmp/${TMP_FILE}
+
+
+elif  [ "${USAGE}" == 'update' ] ; then
+
+	mysql -u ${USERNAME} ${PASSWORD}  -N -B -e "show processlist" | grep -ivE 'select|sleep' |grep -i query|   awk '{print $3}' | sed -e 's/:.*//g' -e 's/\./_/g'| sort |uniq -c >/tmp/${TMP_FILE}
+	
+	cat ${DB_LIST} | while read IP ; do grep ${IP} /tmp/${TMP_FILE}>>/dev/null || echo " 0   ${IP}" >> /tmp/${TMP_FILE} ; done
+
+        TITLE="NO. of updates per host"
+        VALUE_CONFIG=`cat /tmp/${TMP_FILE} | awk '{print $2".label " $2}'`
+        VALUE=`cat /tmp/${TMP_FILE}  | awk '{print $2".value " $1}'`
+ 	awk '{print $2}' /tmp/${TMP_FILE} | sort -u > ${DB_LIST}
+
+        rm -f /tmp/${TMP_FILE}
+	
+else
+	echo "error  check the script usage"
+fi
+
+if [ "$1" == 'config' ] ; then
+                echo -e "graph_title $TITLE\ngraph_vlabel Query\ngraph_category mysql"
+                echo -e "${VALUE_CONFIG}"
+        else
+                echo -e "${VALUE}"
+        fi
+
+

@@ -1,0 +1,54 @@
+#!/bin/bash
+
+#Auther: Mohammed Ameen Al-Qudah
+#Date: 3 Jul 2014
+#Purpose: Munin plugin for mysql total queries nad query type
+
+#Variables:
+#Username : root
+#Password: ****
+USERNAME='root'
+
+# If there is a password the value of the bellow should be '-p***'
+PASSWORD=''
+
+###########
+#Get the script usage:
+#$0_query --> collect no. of queries.
+#$0_query_type --> collect the number of each type
+USAGE=`echo $0 | awk -F '_' '{print $2"_"$3}'`
+
+if [ "${USAGE}" == 'query_' ] ; then
+        TOTAL=`mysql -u ${USERNAME} ${PASSWORD}  -N -B -e "show processlist" | wc -l`
+        TITLE="Total No. of queries"
+        VALUE_CONFIG="Total_Queries.label Queries"
+        VALUE="Total_Queries.value ${TOTAL}"
+elif [ "${USAGE}" == 'query_type' ] ; then
+        mysql -u ${USERNAME} ${PASSWORD}  -N -B -e "show processlist" >/tmp/Query_$$
+        UPDATE=`cat /tmp/Query_$$ | grep -ivE 'NULL|SELECT' -c`
+        SELECT=`cat /tmp/Query_$$ | grep -i 'SELECT' -c`
+        NULL=`cat /tmp/Query_$$ | grep -i 'NULL' -c`
+        rm -f /tmp/Query_$$
+        TITLE="No. of queries per type"
+        VALUE_CONFIG="UPDATE.label UPDATE\nSELECT.label SELECT\nNULL.label NULL"
+        VALUE="UPDATE.value ${UPDATE}\nSELECT.value ${SELECT}\nNULL.value ${NULL}"
+elif [ "${USAGE}" == 'per_host' ] ; then
+	mysql -u ${USERNAME} ${PASSWORD}  -N -B -e "show processlist" >/tmp/Query_$$
+	TITLE="No. of connections per host"
+	VALUE_CONFIG=`cat /tmp/Query_$$ | awk '{print $3}'| sed -e 's/:.*//g' -e 's/\./_/g' | sort -u   | awk '{print $0".label " $0}'`
+	VALUE=`cat /tmp/Query_$$ | awk '{print $3}'| sed -e 's/:.*//g' -e 's/\./_/g' | sort |uniq -c | awk '{print $2".value " $1}'`
+	rm -f /tmp/Query_$$
+else
+        echo -e "Wrong use of munin plugin IT should be:\nSCRIPTNAME_query --> for total no. of queries.\nSCRIPTNAME_query_type -->for specyfing query types"
+        exit -1
+        fi
+
+if  [ "$?" != '-1' ] ; then
+        if [ "$1" == 'config' ] ; then
+                echo -e "graph_title $TITLE\ngraph_vlabel Query\ngraph_category mysql"
+                echo -e "${VALUE_CONFIG}"
+        else
+                echo -e "${VALUE}"
+        fi
+fi
+
